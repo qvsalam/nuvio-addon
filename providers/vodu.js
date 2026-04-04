@@ -42,7 +42,7 @@ function tryLinks(links, idx) {
     .then(function(r) { return r.text(); })
     .then(function(html) {
       var s = extractVideos(html);
-      if (s.length > 0) return verifyAndAddVariants(s);
+      if (s.length > 0) return addVariants(s);
       return tryLinks(links, idx + 1);
     })
     .catch(function() { return tryLinks(links, idx + 1); });
@@ -68,17 +68,16 @@ function tryEpLinks(links, idx, sNum, eNum) {
       }
       if (epLinks.length > 0) return tryLinks(epLinks, 0);
       var s = extractVideos(html);
-      if (s.length > 0) return verifyAndAddVariants(s);
+      if (s.length > 0) return addVariants(s);
       return tryEpLinks(links, idx + 1, sNum, eNum);
     })
     .catch(function() { return tryEpLinks(links, idx + 1, sNum, eNum); });
 }
 
-function verifyAndAddVariants(streams) {
-  // Find a base URL to generate variants from
+function addVariants(streams) {
   var baseUrl = null;
-  var qualities = ["360", "720", "1080"];
   var foundQs = {};
+  var qualities = ["360", "720", "1080"];
 
   for (var i = 0; i < streams.length; i++) {
     var match = streams[i].url.match(/(-)(360|480|720|1080)(\.mp4)/i);
@@ -90,7 +89,6 @@ function verifyAndAddVariants(streams) {
 
   if (!baseUrl) return Promise.resolve(streams);
 
-  // Find missing qualities and verify them
   var missing = [];
   for (var q = 0; q < qualities.length; q++) {
     if (!foundQs[qualities[q]]) {
@@ -106,11 +104,10 @@ function verifyAndAddVariants(streams) {
 
   if (missing.length === 0) return Promise.resolve(streams);
 
-  // Verify each missing URL with HEAD request
-  return verifyUrls(missing, 0, streams);
+  return checkUrls(missing, 0, streams);
 }
 
-function verifyUrls(missing, idx, streams) {
+function checkUrls(missing, idx, streams) {
   if (idx >= missing.length) {
     var order = {"1080p": 0, "720p": 1, "480p": 2, "360p": 3, "HLS": 4, "HD": 5};
     streams.sort(function(a, b) {
@@ -119,9 +116,12 @@ function verifyUrls(missing, idx, streams) {
     return streams;
   }
 
-  return fetch(missing[idx].url, { method: "HEAD" })
+  return fetch(missing[idx].url, {
+    method: "GET",
+    headers: { "Range": "bytes=0-0" }
+  })
     .then(function(r) {
-      if (r.ok) {
+      if (r.status === 200 || r.status === 206) {
         streams.push({
           name: "VODU",
           title: "VODU " + missing[idx].quality,
@@ -129,10 +129,10 @@ function verifyUrls(missing, idx, streams) {
           quality: missing[idx].quality
         });
       }
-      return verifyUrls(missing, idx + 1, streams);
+      return checkUrls(missing, idx + 1, streams);
     })
     .catch(function() {
-      return verifyUrls(missing, idx + 1, streams);
+      return checkUrls(missing, idx + 1, streams);
     });
 }
 
@@ -165,7 +165,6 @@ function extractVideos(html) {
   while ((m = v4.exec(html)) !== null) add(m[1]);
   var v5 = /["'](https?:\/\/[^"'\s]+\.(?:mp4|m3u8)(?:\?[^"'\s]*)?)/gi;
   while ((m = v5.exec(html)) !== null) add(m[1]);
-
   var order = {"1080p": 0, "720p": 1, "480p": 2, "360p": 3, "HLS": 4, "HD": 5};
   streams.sort(function(a, b) {
     return (order[a.quality] != null ? order[a.quality] : 9) - (order[b.quality] != null ? order[b.quality] : 9);
