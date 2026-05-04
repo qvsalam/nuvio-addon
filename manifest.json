@@ -1,12 +1,13 @@
 {
+  "id": "qvsalam-nuviotv-scrapers",
   "name": "NuvioTV Scrapers",
-  "version": "5.1.0",
+  "version": "5.2.0",
   "scrapers": [
     {
       "id": "vodu-iraq",
       "name": "VODU",
-      "description": "VODU Iraqi streaming - movies and TV shows with dual-language search, caching, and retry",
-      "version": "3.1.0",
+      "description": "VODU Iraqi streaming - movies and TV shows",
+      "version": "3.2.0",
       "author": "qvsalam",
       "supportedTypes": ["movie", "tv"],
       "filename": "providers/vodu.js",
@@ -18,8 +19,8 @@
     {
       "id": "cinemabox-iraq",
       "name": "CinemaBox",
-      "description": "CinemaBox Iraqi streaming - movies and TV shows with similarity matching and caching",
-      "version": "2.1.0",
+      "description": "CinemaBox Iraqi streaming - movies and TV shows",
+      "version": "2.2.0",
       "author": "qvsalam",
       "supportedTypes": ["movie", "tv"],
       "filename": "providers/cinemabox.js",
@@ -31,8 +32,8 @@
     {
       "id": "cinemana-iraq",
       "name": "Cinemana",
-      "description": "Cinemana Iraqi streaming - movies and TV shows with year filtering and similarity matching",
-      "version": "2.1.0",
+      "description": "Cinemana Iraqi streaming - movies and TV shows",
+      "version": "2.2.0",
       "author": "qvsalam",
       "supportedTypes": ["movie", "tv"],
       "filename": "providers/cinemana.js",

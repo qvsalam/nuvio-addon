@@ -1,6 +1,5 @@
-/* CinemaBox Provider - Nuvio Compatible
- * Features: dual-language TMDB, similarity matching, timeout, retry, caching
- */
+// CinemaBox Provider for Nuvio
+// Hermes/React Native compatible - Promise chains only, no async/await
 
 var CB_API = "https://cinema.albox.co/api/v4/";
 var TMDB_BASE = "https://api.themoviedb.org/3";
@@ -16,18 +15,6 @@ function cacheGet(key) {
 
 function cacheSet(key, data) {
   CACHE[key] = { data: data, expiry: Date.now() + CACHE_TTL };
-}
-
-function fetchWithRetry(url, retries) {
-  retries = retries || 3;
-  return fetch(url)
-    .then(function(r) { return r; })
-    .catch(function(err) {
-      if (retries <= 1) return Promise.reject(err);
-      var delay = 1000 * Math.pow(2, 3 - retries);
-      return new Promise(function(resolve) { setTimeout(resolve, delay); })
-        .then(function() { return fetchWithRetry(url, retries - 1); });
-    });
 }
 
 function normalize(s) {
@@ -69,8 +56,8 @@ function getStreams(tmdbId, mediaType, season, episode) {
   var arUrl = TMDB_BASE + path + "?api_key=" + TMDB_API_KEY + "&language=ar";
 
   return Promise.all([
-    fetchWithRetry(enUrl).then(function(r) { return r.json(); }).catch(function() { return {}; }),
-    fetchWithRetry(arUrl).then(function(r) { return r.json(); }).catch(function() { return {}; })
+    fetch(enUrl).then(function(r) { return r.json(); }).catch(function() { return {}; }),
+    fetch(arUrl).then(function(r) { return r.json(); }).catch(function() { return {}; })
   ])
     .then(function(results) {
       var enInfo = results[0];
@@ -96,7 +83,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
 
 function searchCB(titles, idx, mediaType, season, episode, year) {
   if (idx >= titles.length) return [];
-  return fetchWithRetry(CB_API + "search?q=" + encodeURIComponent(titles[idx]))
+  return fetch(CB_API + "search?q=" + encodeURIComponent(titles[idx]))
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (!data.results || data.results.length === 0) {
@@ -125,7 +112,7 @@ function searchCB(titles, idx, mediaType, season, episode, year) {
       }
 
       if (!best) return searchCB(titles, idx + 1, mediaType, season, episode, year);
-      return fetchWithRetry(CB_API + "shows/shows/dynamic/" + best.id)
+      return fetch(CB_API + "shows/shows/dynamic/" + best.id)
         .then(function(r2) { return r2.json(); })
         .then(function(detail) {
           if (!detail.post_info) return searchCB(titles, idx + 1, mediaType, season, episode, year);
@@ -162,7 +149,7 @@ function getTVStreams(detail, showId, sNum, eNum) {
 }
 
 function getPlayerStreams(episodeId) {
-  return fetchWithRetry(CB_API + "shows/episodes/player/" + episodeId)
+  return fetch(CB_API + "shows/episodes/player/" + episodeId)
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var streams = [];
