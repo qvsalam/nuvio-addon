@@ -1,8 +1,3 @@
-// CinemaBox Provider for Nuvio
-// Hermes/React Native compatible - Promise chains only, no async/await
-
-var CB_API = "https://cinema.albox.co/api/v4/";
-var TMDB_BASE = "https://api.themoviedb.org/3";
 var CACHE = {};
 var CACHE_TTL = 10 * 60 * 1000;
 
@@ -21,7 +16,7 @@ function normalize(s) {
   return s.toLowerCase().replace(/[^\w\u0600-\u06FF\s]/g, "").replace(/\s+/g, " ").trim();
 }
 
-function similarity(a, b) {
+function levenshtein(a, b) {
   var na = normalize(a);
   var nb = normalize(b);
   if (na === nb) return 1;
@@ -51,9 +46,10 @@ function getStreams(tmdbId, mediaType, season, episode) {
   var cached = cacheGet(cacheKey);
   if (cached) return Promise.resolve(cached);
 
-  var path = "/" + (mediaType === "movie" ? "movie" : "tv") + "/" + tmdbId;
-  var enUrl = TMDB_BASE + path + "?api_key=" + TMDB_API_KEY + "&language=en";
-  var arUrl = TMDB_BASE + path + "?api_key=" + TMDB_API_KEY + "&language=ar";
+  var API = "https://cinema.albox.co/api/v4/";
+  var tmdbPath = "/" + (mediaType === "movie" ? "movie" : "tv") + "/" + tmdbId;
+  var enUrl = "https://api.themoviedb.org/3" + tmdbPath + "?api_key=" + TMDB_API_KEY + "&language=en";
+  var arUrl = "https://api.themoviedb.org/3" + tmdbPath + "?api_key=" + TMDB_API_KEY + "&language=ar";
 
   return Promise.all([
     fetch(enUrl).then(function(r) { return r.json(); }).catch(function() { return {}; }),
@@ -68,26 +64,26 @@ function getStreams(tmdbId, mediaType, season, episode) {
       addTitle(enInfo.name); addTitle(enInfo.original_name);
       addTitle(arInfo.title); addTitle(arInfo.original_title);
       addTitle(arInfo.name); addTitle(arInfo.original_name);
+      if (titles.length === 0) return [];
       var year = null;
       var dateStr = enInfo.release_date || enInfo.first_air_date;
       if (dateStr) year = parseInt(dateStr.substring(0, 4), 10) || null;
-      if (titles.length === 0) return [];
-      return searchCB(titles, 0, mediaType, season, episode, year);
+      return searchCB(API, titles, 0, mediaType, season, episode, year);
     })
     .then(function(streams) {
-      if (streams.length > 0) cacheSet(cacheKey, streams);
-      return streams;
+      if (streams && streams.length > 0) cacheSet(cacheKey, streams);
+      return streams || [];
     })
     .catch(function() { return []; });
 }
 
-function searchCB(titles, idx, mediaType, season, episode, year) {
+function searchCB(API, titles, idx, mediaType, season, episode, year) {
   if (idx >= titles.length) return [];
-  return fetch(CB_API + "search?q=" + encodeURIComponent(titles[idx]))
+  return fetch(API + "search?q=" + encodeURIComponent(titles[idx]))
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (!data.results || data.results.length === 0) {
-        return searchCB(titles, idx + 1, mediaType, season, episode, year);
+        return searchCB(API, titles, idx + 1, mediaType, season, episode, year);
       }
       var targetType = mediaType === "movie" ? "MOVIE" : "SERIES";
       var candidates = [];
@@ -104,31 +100,31 @@ function searchCB(titles, idx, mediaType, season, episode, year) {
         if (yearFiltered.length > 0) candidates = yearFiltered;
       }
 
-      var best = candidates[0];
+      var match = candidates[0];
       var bestScore = 0;
       for (var s = 0; s < candidates.length; s++) {
-        var score = similarity(titles[idx], candidates[s].title || "");
-        if (score > bestScore) { bestScore = score; best = candidates[s]; }
+        var score = levenshtein(titles[idx], candidates[s].title || "");
+        if (score > bestScore) { bestScore = score; match = candidates[s]; }
       }
 
-      if (!best) return searchCB(titles, idx + 1, mediaType, season, episode, year);
-      return fetch(CB_API + "shows/shows/dynamic/" + best.id)
+      if (!match) match = data.results[0];
+      return fetch(API + "shows/shows/dynamic/" + match.id)
         .then(function(r2) { return r2.json(); })
         .then(function(detail) {
-          if (!detail.post_info) return searchCB(titles, idx + 1, mediaType, season, episode, year);
+          if (!detail.post_info) return searchCB(API, titles, idx + 1, mediaType, season, episode, year);
           if (mediaType === "movie") {
             var epId = detail.post_info.episode_id;
             if (!epId) return [];
-            return getPlayerStreams(epId);
+            return getPlayerStreams(API, epId);
           } else {
-            return getTVStreams(detail, best.id, parseInt(season) || 1, parseInt(episode) || 1);
+            return getTVStreams(API, detail, match.id, parseInt(season) || 1, parseInt(episode) || 1);
           }
         });
     })
-    .catch(function() { return searchCB(titles, idx + 1, mediaType, season, episode, year); });
+    .catch(function() { return searchCB(API, titles, idx + 1, mediaType, season, episode, year); });
 }
 
-function getTVStreams(detail, showId, sNum, eNum) {
+function getTVStreams(API, detail, showId, sNum, eNum) {
   var sections = detail.sections || [];
   var seasonItems = [];
   for (var i = 0; i < sections.length; i++) {
@@ -140,16 +136,16 @@ function getTVStreams(detail, showId, sNum, eNum) {
   }
   if (seasonItems.length > 0 && eNum <= seasonItems.length) {
     var ep = seasonItems[eNum - 1];
-    if (ep && ep.id) return getPlayerStreams(ep.id);
+    if (ep && ep.id) return getPlayerStreams(API, ep.id);
   }
   if (detail.post_info && detail.post_info.episode_id) {
-    return getPlayerStreams(detail.post_info.episode_id);
+    return getPlayerStreams(API, detail.post_info.episode_id);
   }
   return Promise.resolve([]);
 }
 
-function getPlayerStreams(episodeId) {
-  return fetch(CB_API + "shows/episodes/player/" + episodeId)
+function getPlayerStreams(API, episodeId) {
+  return fetch(API + "shows/episodes/player/" + episodeId)
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var streams = [];
@@ -184,8 +180,4 @@ function getPlayerStreams(episodeId) {
     .catch(function() { return []; });
 }
 
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = { getStreams: getStreams };
-} else if (typeof global !== "undefined") {
-  global.getStreams = getStreams;
-}
+module.exports = { getStreams: getStreams };

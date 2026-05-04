@@ -1,21 +1,5 @@
-// VODU Provider for Nuvio
-// Hermes/React Native compatible - Promise chains only, no async/await
-
-var VODU_BASE = "https://movie.vodu.me";
-var TMDB_BASE = "https://api.themoviedb.org/3";
 var CACHE = {};
 var CACHE_TTL = 10 * 60 * 1000;
-
-var USER_AGENTS = [
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0"
-];
-
-function randomUA() {
-  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-}
 
 function cacheGet(key) {
   var entry = CACHE[key];
@@ -28,20 +12,14 @@ function cacheSet(key, data) {
   CACHE[key] = { data: data, expiry: Date.now() + CACHE_TTL };
 }
 
-function voduFetch(url) {
-  return fetch(url, {
-    headers: { "User-Agent": randomUA() }
-  });
-}
-
 function getStreams(tmdbId, mediaType, season, episode) {
   var cacheKey = "vodu:" + tmdbId + ":" + mediaType + ":" + season + ":" + episode;
   var cached = cacheGet(cacheKey);
   if (cached) return Promise.resolve(cached);
 
   var path = "/" + (mediaType === "movie" ? "movie" : "tv") + "/" + tmdbId;
-  var enUrl = TMDB_BASE + path + "?api_key=" + TMDB_API_KEY + "&language=en";
-  var arUrl = TMDB_BASE + path + "?api_key=" + TMDB_API_KEY + "&language=ar";
+  var enUrl = "https://api.themoviedb.org/3" + path + "?api_key=" + TMDB_API_KEY + "&language=en";
+  var arUrl = "https://api.themoviedb.org/3" + path + "?api_key=" + TMDB_API_KEY + "&language=ar";
 
   return Promise.all([
     fetch(enUrl).then(function(r) { return r.json(); }).catch(function() { return {}; }),
@@ -60,15 +38,15 @@ function getStreams(tmdbId, mediaType, season, episode) {
       return searchVODU(titles, 0, mediaType, season, episode);
     })
     .then(function(streams) {
-      if (streams.length > 0) cacheSet(cacheKey, streams);
-      return streams;
+      if (streams && streams.length > 0) cacheSet(cacheKey, streams);
+      return streams || [];
     })
     .catch(function() { return []; });
 }
 
 function searchVODU(titles, idx, mediaType, season, episode) {
   if (idx >= titles.length) return [];
-  return voduFetch(VODU_BASE + "/index.php?do=list&title=" + encodeURIComponent(titles[idx]))
+  return fetch("https://movie.vodu.me/index.php?do=list&title=" + encodeURIComponent(titles[idx]))
     .then(function(r) { return r.text(); })
     .then(function(html) {
       var links = [];
@@ -76,7 +54,7 @@ function searchVODU(titles, idx, mediaType, season, episode) {
       var m;
       while ((m = re.exec(html)) !== null) {
         var href = m[1].replace(/&amp;/g, "&");
-        if (href.indexOf("http") !== 0) href = VODU_BASE + "/" + href.replace(/^\//, "");
+        if (href.indexOf("http") !== 0) href = "https://movie.vodu.me/" + href.replace(/^\//, "");
         if (links.indexOf(href) === -1) links.push(href);
       }
       if (links.length === 0) return searchVODU(titles, idx + 1, mediaType, season, episode);
@@ -87,7 +65,7 @@ function searchVODU(titles, idx, mediaType, season, episode) {
 
 function tryLinks(links, idx, mediaType, season, episode) {
   if (idx >= links.length) return [];
-  return voduFetch(links[idx])
+  return fetch(links[idx])
     .then(function(r) { return r.text(); })
     .then(function(html) {
       var allUrls = getAllVideoUrls(html);
@@ -219,8 +197,4 @@ function sortStreams(streams) {
   });
 }
 
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = { getStreams: getStreams };
-} else if (typeof global !== "undefined") {
-  global.getStreams = getStreams;
-}
+module.exports = { getStreams: getStreams };
