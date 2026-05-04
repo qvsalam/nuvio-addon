@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+*.jsonl
+provider-status.json
+.env
+.env.*
