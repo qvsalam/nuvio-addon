@@ -1,6 +1,5 @@
-/* VODU Provider - Nuvio Compatible
- * Features: dual-language TMDB, similarity matching, timeout, retry, User-Agent rotation, caching
- */
+// VODU Provider for Nuvio
+// Hermes/React Native compatible - Promise chains only, no async/await
 
 var VODU_BASE = "https://movie.vodu.me";
 var TMDB_BASE = "https://api.themoviedb.org/3";
@@ -29,48 +28,10 @@ function cacheSet(key, data) {
   CACHE[key] = { data: data, expiry: Date.now() + CACHE_TTL };
 }
 
-function fetchWithRetry(url, retries, headers) {
-  retries = retries || 3;
-  headers = headers || {};
-  if (!headers["User-Agent"]) headers["User-Agent"] = randomUA();
-
-  return fetch(url, { headers: headers })
-    .then(function(r) { return r; })
-    .catch(function(err) {
-      if (retries <= 1) return Promise.reject(err);
-      var delay = 1000 * Math.pow(2, 3 - retries);
-      return new Promise(function(resolve) { setTimeout(resolve, delay); })
-        .then(function() { return fetchWithRetry(url, retries - 1, headers); });
-    });
-}
-
-function normalize(s) {
-  return s.toLowerCase().replace(/[^\w\u0600-\u06FF\s]/g, "").replace(/\s+/g, " ").trim();
-}
-
-function similarity(a, b) {
-  var na = normalize(a);
-  var nb = normalize(b);
-  if (na === nb) return 1;
-  if (na.length === 0 || nb.length === 0) return 0;
-  var longer = na.length >= nb.length ? na : nb;
-  var shorter = na.length < nb.length ? na : nb;
-  var m = longer.length;
-  var n = shorter.length;
-  var dp = [];
-  for (var i = 0; i <= m; i++) {
-    dp[i] = [];
-    for (var j = 0; j <= n; j++) dp[i][j] = 0;
-    dp[i][0] = i;
-  }
-  for (var j2 = 0; j2 <= n; j2++) dp[0][j2] = j2;
-  for (var i2 = 1; i2 <= m; i2++) {
-    for (var j3 = 1; j3 <= n; j3++) {
-      var cost = longer[i2 - 1] === shorter[j3 - 1] ? 0 : 1;
-      dp[i2][j3] = Math.min(dp[i2 - 1][j3] + 1, dp[i2][j3 - 1] + 1, dp[i2 - 1][j3 - 1] + cost);
-    }
-  }
-  return 1 - dp[m][n] / m;
+function voduFetch(url) {
+  return fetch(url, {
+    headers: { "User-Agent": randomUA() }
+  });
 }
 
 function getStreams(tmdbId, mediaType, season, episode) {
@@ -83,8 +44,8 @@ function getStreams(tmdbId, mediaType, season, episode) {
   var arUrl = TMDB_BASE + path + "?api_key=" + TMDB_API_KEY + "&language=ar";
 
   return Promise.all([
-    fetchWithRetry(enUrl).then(function(r) { return r.json(); }).catch(function() { return {}; }),
-    fetchWithRetry(arUrl).then(function(r) { return r.json(); }).catch(function() { return {}; })
+    fetch(enUrl).then(function(r) { return r.json(); }).catch(function() { return {}; }),
+    fetch(arUrl).then(function(r) { return r.json(); }).catch(function() { return {}; })
   ])
     .then(function(results) {
       var enInfo = results[0];
@@ -107,7 +68,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
 
 function searchVODU(titles, idx, mediaType, season, episode) {
   if (idx >= titles.length) return [];
-  return fetchWithRetry(VODU_BASE + "/index.php?do=list&title=" + encodeURIComponent(titles[idx]))
+  return voduFetch(VODU_BASE + "/index.php?do=list&title=" + encodeURIComponent(titles[idx]))
     .then(function(r) { return r.text(); })
     .then(function(html) {
       var links = [];
@@ -126,7 +87,7 @@ function searchVODU(titles, idx, mediaType, season, episode) {
 
 function tryLinks(links, idx, mediaType, season, episode) {
   if (idx >= links.length) return [];
-  return fetchWithRetry(links[idx])
+  return voduFetch(links[idx])
     .then(function(r) { return r.text(); })
     .then(function(html) {
       var allUrls = getAllVideoUrls(html);

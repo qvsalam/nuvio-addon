@@ -1,6 +1,5 @@
-/* Cinemana Provider - Nuvio Compatible
- * Features: dual-language TMDB, similarity matching, year filtering, timeout, retry, caching
- */
+// Cinemana Provider for Nuvio
+// Hermes/React Native compatible - Promise chains only, no async/await
 
 var CINEMANA_API = "https://cinemana.shabakaty.com/api/android/";
 var TMDB_BASE = "https://api.themoviedb.org/3";
@@ -16,18 +15,6 @@ function cacheGet(key) {
 
 function cacheSet(key, data) {
   CACHE[key] = { data: data, expiry: Date.now() + CACHE_TTL };
-}
-
-function fetchWithRetry(url, retries) {
-  retries = retries || 3;
-  return fetch(url)
-    .then(function(r) { return r; })
-    .catch(function(err) {
-      if (retries <= 1) return Promise.reject(err);
-      var delay = 1000 * Math.pow(2, 3 - retries);
-      return new Promise(function(resolve) { setTimeout(resolve, delay); })
-        .then(function() { return fetchWithRetry(url, retries - 1); });
-    });
 }
 
 function normalize(s) {
@@ -69,8 +56,8 @@ function getStreams(tmdbId, mediaType, season, episode) {
   var arUrl = TMDB_BASE + path + "?api_key=" + TMDB_API_KEY + "&language=ar";
 
   return Promise.all([
-    fetchWithRetry(enUrl).then(function(r) { return r.json(); }).catch(function() { return {}; }),
-    fetchWithRetry(arUrl).then(function(r) { return r.json(); }).catch(function() { return {}; })
+    fetch(enUrl).then(function(r) { return r.json(); }).catch(function() { return {}; }),
+    fetch(arUrl).then(function(r) { return r.json(); }).catch(function() { return {}; })
   ])
     .then(function(results) {
       var enInfo = results[0];
@@ -97,7 +84,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
 
 function searchCinemana(titles, idx, type, season, episode, year) {
   if (idx >= titles.length) return [];
-  return fetchWithRetry(CINEMANA_API + "AdvancedSearch?videoTitle=" + encodeURIComponent(titles[idx]) + "&type=" + type)
+  return fetch(CINEMANA_API + "AdvancedSearch?videoTitle=" + encodeURIComponent(titles[idx]) + "&type=" + type)
     .then(function(r) { return r.json(); })
     .then(function(results) {
       if (!results || results.length === 0) {
@@ -137,7 +124,7 @@ function searchCinemana(titles, idx, type, season, episode, year) {
 }
 
 function getTVFiles(showNb, sNum, eNum) {
-  return fetchWithRetry(CINEMANA_API + "videoSeason/id/" + showNb)
+  return fetch(CINEMANA_API + "videoSeason/id/" + showNb)
     .then(function(r) { return r.json(); })
     .then(function(seasons) {
       if (!seasons || seasons.length === 0) return getFiles(showNb);
@@ -165,7 +152,7 @@ function getTVFiles(showNb, sNum, eNum) {
 }
 
 function getFiles(nb) {
-  return fetchWithRetry(CINEMANA_API + "transcoddedFiles/id/" + nb)
+  return fetch(CINEMANA_API + "transcoddedFiles/id/" + nb)
     .then(function(r) { return r.json(); })
     .then(function(files) {
       var streams = [];
