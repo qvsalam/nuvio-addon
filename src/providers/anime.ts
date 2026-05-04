@@ -8,7 +8,7 @@ import type {
   QualityLabel,
 } from '../types/index.js';
 import { BaseProvider } from './base-provider.js';
-import { fetchJSON, fetchText } from '../utils/fetch.js';
+import { fetchJSON, fetchPostJSON, fetchText } from '../utils/fetch.js';
 import { sortByQuality } from '../utils/quality.js';
 import { similarity } from '../utils/similarity.js';
 
@@ -87,21 +87,10 @@ export class AnimeProvider extends BaseProvider {
           }
         }
       `;
-      const data = await fetchJSON<AniListResponse>(ANILIST_API, {
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      // AniList uses POST but we simplify by using the REST-like approach
-      void data;
-      const resp = await fetch(ANILIST_API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query,
-          variables: { id: parseInt(anilistId, 10) },
-        }),
-      });
-      const result = (await resp.json()) as AniListResponse;
+      const result = await fetchPostJSON<AniListResponse>(
+        ANILIST_API,
+        { query, variables: { id: parseInt(anilistId, 10) } }
+      );
       const media = result.data?.Media;
       if (!media?.title) return [];
 

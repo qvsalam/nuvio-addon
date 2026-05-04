@@ -158,6 +158,8 @@ export interface FetchOptions {
   timeoutMs?: number;
   retries?: number;
   headers?: Record<string, string>;
+  method?: 'GET' | 'POST';
+  body?: string;
 }
 
 export interface Manifest {

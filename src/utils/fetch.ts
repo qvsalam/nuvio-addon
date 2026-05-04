@@ -28,6 +28,8 @@ export async function fetchWithTimeout(
     timeoutMs = DEFAULT_TIMEOUT_MS,
     retries = DEFAULT_RETRIES,
     headers = {},
+    method = 'GET',
+    body,
   } = options;
 
   let lastError: Error | null = null;
@@ -38,11 +40,13 @@ export async function fetchWithTimeout(
 
     try {
       const response = await fetch(url, {
+        method,
         signal: controller.signal,
         headers: {
           'User-Agent': getRandomUserAgent(),
           ...headers,
         },
+        ...(body !== undefined ? { body } : {}),
       });
       clearTimeout(timer);
       return response;
@@ -59,6 +63,23 @@ export async function fetchWithTimeout(
   }
 
   throw lastError ?? new Error(`Failed to fetch ${url} after ${retries + 1} attempts`);
+}
+
+export async function fetchPostJSON<T>(
+  url: string,
+  body: unknown,
+  options?: FetchOptions
+): Promise<T> {
+  const response = await fetchWithTimeout(url, {
+    ...options,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+    body: JSON.stringify(body),
+  });
+  return response.json() as Promise<T>;
 }
 
 export async function fetchJSON<T>(url: string, options?: FetchOptions): Promise<T> {
