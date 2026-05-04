@@ -1,8 +1,3 @@
-// Cinemana Provider for Nuvio
-// Hermes/React Native compatible - Promise chains only, no async/await
-
-var CINEMANA_API = "https://cinemana.shabakaty.com/api/android/";
-var TMDB_BASE = "https://api.themoviedb.org/3";
 var CACHE = {};
 var CACHE_TTL = 10 * 60 * 1000;
 
@@ -21,7 +16,7 @@ function normalize(s) {
   return s.toLowerCase().replace(/[^\w\u0600-\u06FF\s]/g, "").replace(/\s+/g, " ").trim();
 }
 
-function similarity(a, b) {
+function levenshtein(a, b) {
   var na = normalize(a);
   var nb = normalize(b);
   if (na === nb) return 1;
@@ -51,9 +46,10 @@ function getStreams(tmdbId, mediaType, season, episode) {
   var cached = cacheGet(cacheKey);
   if (cached) return Promise.resolve(cached);
 
-  var path = "/" + (mediaType === "movie" ? "movie" : "tv") + "/" + tmdbId;
-  var enUrl = TMDB_BASE + path + "?api_key=" + TMDB_API_KEY + "&language=en";
-  var arUrl = TMDB_BASE + path + "?api_key=" + TMDB_API_KEY + "&language=ar";
+  var API = "https://cinemana.shabakaty.com/api/android/";
+  var tmdbPath = "/" + (mediaType === "movie" ? "movie" : "tv") + "/" + tmdbId;
+  var enUrl = "https://api.themoviedb.org/3" + tmdbPath + "?api_key=" + TMDB_API_KEY + "&language=en";
+  var arUrl = "https://api.themoviedb.org/3" + tmdbPath + "?api_key=" + TMDB_API_KEY + "&language=ar";
 
   return Promise.all([
     fetch(enUrl).then(function(r) { return r.json(); }).catch(function() { return {}; }),
@@ -68,27 +64,27 @@ function getStreams(tmdbId, mediaType, season, episode) {
       addTitle(enInfo.name); addTitle(enInfo.original_name);
       addTitle(arInfo.title); addTitle(arInfo.original_title);
       addTitle(arInfo.name); addTitle(arInfo.original_name);
+      if (titles.length === 0) return [];
       var year = null;
       var dateStr = enInfo.release_date || enInfo.first_air_date;
       if (dateStr) year = parseInt(dateStr.substring(0, 4), 10) || null;
-      if (titles.length === 0) return [];
       var type = mediaType === "movie" ? "movies" : "series";
-      return searchCinemana(titles, 0, type, season, episode, year);
+      return searchCinemana(API, titles, 0, type, season, episode, year);
     })
     .then(function(streams) {
-      if (streams.length > 0) cacheSet(cacheKey, streams);
-      return streams;
+      if (streams && streams.length > 0) cacheSet(cacheKey, streams);
+      return streams || [];
     })
     .catch(function() { return []; });
 }
 
-function searchCinemana(titles, idx, type, season, episode, year) {
+function searchCinemana(API, titles, idx, type, season, episode, year) {
   if (idx >= titles.length) return [];
-  return fetch(CINEMANA_API + "AdvancedSearch?videoTitle=" + encodeURIComponent(titles[idx]) + "&type=" + type)
+  return fetch(API + "AdvancedSearch?videoTitle=" + encodeURIComponent(titles[idx]) + "&type=" + type)
     .then(function(r) { return r.json(); })
     .then(function(results) {
       if (!results || results.length === 0) {
-        return searchCinemana(titles, idx + 1, type, season, episode, year);
+        return searchCinemana(API, titles, idx + 1, type, season, episode, year);
       }
 
       var candidates = results;
@@ -107,27 +103,27 @@ function searchCinemana(titles, idx, type, season, episode, year) {
       for (var s = 0; s < candidates.length; s++) {
         var c = candidates[s];
         var score = Math.max(
-          similarity(titles[idx], c.en_title || ""),
-          similarity(titles[idx], c.ar_title || ""),
-          similarity(titles[idx], c.title || "")
+          levenshtein(titles[idx], c.en_title || ""),
+          levenshtein(titles[idx], c.ar_title || ""),
+          levenshtein(titles[idx], c.title || "")
         );
         if (score > bestScore) { bestScore = score; best = c; }
       }
 
       var nb = best.nb;
       if (type === "series" && season && episode) {
-        return getTVFiles(nb, parseInt(season) || 1, parseInt(episode) || 1);
+        return getTVFiles(API, nb, parseInt(season) || 1, parseInt(episode) || 1);
       }
-      return getFiles(nb);
+      return getFiles(API, nb);
     })
-    .catch(function() { return searchCinemana(titles, idx + 1, type, season, episode, year); });
+    .catch(function() { return searchCinemana(API, titles, idx + 1, type, season, episode, year); });
 }
 
-function getTVFiles(showNb, sNum, eNum) {
-  return fetch(CINEMANA_API + "videoSeason/id/" + showNb)
+function getTVFiles(API, showNb, sNum, eNum) {
+  return fetch(API + "videoSeason/id/" + showNb)
     .then(function(r) { return r.json(); })
     .then(function(seasons) {
-      if (!seasons || seasons.length === 0) return getFiles(showNb);
+      if (!seasons || seasons.length === 0) return getFiles(API, showNb);
       var seasonData = null;
       for (var i = 0; i < seasons.length; i++) {
         var s = seasons[i];
@@ -137,7 +133,7 @@ function getTVFiles(showNb, sNum, eNum) {
       if (!seasonData && seasons.length >= sNum) seasonData = seasons[sNum - 1];
       if (!seasonData) return [];
       var episodes = seasonData.episodes || [];
-      if (episodes.length === 0) return getFiles(showNb);
+      if (episodes.length === 0) return getFiles(API, showNb);
       var epNb = null;
       for (var j = 0; j < episodes.length; j++) {
         var ep = episodes[j];
@@ -146,13 +142,13 @@ function getTVFiles(showNb, sNum, eNum) {
       }
       if (!epNb && episodes.length >= eNum) epNb = episodes[eNum - 1].nb;
       if (!epNb) return [];
-      return getFiles(epNb);
+      return getFiles(API, epNb);
     })
-    .catch(function() { return getFiles(showNb); });
+    .catch(function() { return getFiles(API, showNb); });
 }
 
-function getFiles(nb) {
-  return fetch(CINEMANA_API + "transcoddedFiles/id/" + nb)
+function getFiles(API, nb) {
+  return fetch(API + "transcoddedFiles/id/" + nb)
     .then(function(r) { return r.json(); })
     .then(function(files) {
       var streams = [];
@@ -177,8 +173,4 @@ function getFiles(nb) {
     .catch(function() { return []; });
 }
 
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = { getStreams: getStreams };
-} else if (typeof global !== "undefined") {
-  global.getStreams = getStreams;
-}
+module.exports = { getStreams: getStreams };
