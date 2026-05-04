@@ -1,45 +1,17 @@
-var CACHE = {};
-var CACHE_TTL = 10 * 60 * 1000;
-
-function cacheGet(key) {
-  var entry = CACHE[key];
-  if (!entry) return null;
-  if (Date.now() > entry.expiry) { delete CACHE[key]; return null; }
-  return entry.data;
-}
-
-function cacheSet(key, data) {
-  CACHE[key] = { data: data, expiry: Date.now() + CACHE_TTL };
-}
-
 function getStreams(tmdbId, mediaType, season, episode) {
-  var cacheKey = "vodu:" + tmdbId + ":" + mediaType + ":" + season + ":" + episode;
-  var cached = cacheGet(cacheKey);
-  if (cached) return Promise.resolve(cached);
-
   var path = "/" + (mediaType === "movie" ? "movie" : "tv") + "/" + tmdbId;
-  var enUrl = "https://api.themoviedb.org/3" + path + "?api_key=" + TMDB_API_KEY + "&language=en";
-  var arUrl = "https://api.themoviedb.org/3" + path + "?api_key=" + TMDB_API_KEY + "&language=ar";
+  var url = "https://api.themoviedb.org/3" + path + "?api_key=" + TMDB_API_KEY + "&language=en";
 
-  return Promise.all([
-    fetch(enUrl).then(function(r) { return r.json(); }).catch(function() { return {}; }),
-    fetch(arUrl).then(function(r) { return r.json(); }).catch(function() { return {}; })
-  ])
-    .then(function(results) {
-      var enInfo = results[0];
-      var arInfo = results[1];
+  return fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(info) {
       var titles = [];
-      var addTitle = function(t) { if (t && titles.indexOf(t) === -1) titles.push(t); };
-      addTitle(enInfo.title); addTitle(enInfo.original_title);
-      addTitle(enInfo.name); addTitle(enInfo.original_name);
-      addTitle(arInfo.title); addTitle(arInfo.original_title);
-      addTitle(arInfo.name); addTitle(arInfo.original_name);
+      if (info.title) titles.push(info.title);
+      if (info.original_title && titles.indexOf(info.original_title) === -1) titles.push(info.original_title);
+      if (info.name) titles.push(info.name);
+      if (info.original_name && titles.indexOf(info.original_name) === -1) titles.push(info.original_name);
       if (titles.length === 0) return [];
       return searchVODU(titles, 0, mediaType, season, episode);
-    })
-    .then(function(streams) {
-      if (streams && streams.length > 0) cacheSet(cacheKey, streams);
-      return streams || [];
     })
     .catch(function() { return []; });
 }
@@ -85,8 +57,10 @@ function filterEpisode(allUrls, sNum, eNum, html) {
   var sStr = sNum < 10 ? "0" + sNum : "" + sNum;
   var eStr = eNum < 10 ? "0" + eNum : "" + eNum;
   var pats = [
-    "S" + sStr + "E" + eStr, "s" + sStr + "e" + eStr,
-    "S" + sNum + "E" + eNum, "s" + sNum + "e" + eNum
+    "S" + sStr + "E" + eStr,
+    "s" + sStr + "e" + eStr,
+    "S" + sNum + "E" + eNum,
+    "s" + sNum + "e" + eNum
   ];
   var streams = [];
   var seen = {};
@@ -96,7 +70,10 @@ function filterEpisode(allUrls, sNum, eNum, html) {
     var upper = url.toUpperCase();
     var matched = false;
     for (var p = 0; p < pats.length; p++) {
-      if (upper.indexOf(pats[p].toUpperCase()) > -1) { matched = true; break; }
+      if (upper.indexOf(pats[p].toUpperCase()) > -1) {
+        matched = true;
+        break;
+      }
     }
     if (matched && !seen[url]) {
       seen[url] = true;
@@ -107,7 +84,8 @@ function filterEpisode(allUrls, sNum, eNum, html) {
     var epPats = [
       "_E" + eStr + "_", "_E" + eStr + "-", "_E" + eStr + ".",
       "_E" + eNum + "_", "_E" + eNum + "-", "_E" + eNum + ".",
-      "E" + eStr + "_", "E" + eStr + "-", "_" + eStr + "_"
+      "E" + eStr + "_", "E" + eStr + "-",
+      "_" + eStr + "_"
     ];
     for (var i2 = 0; i2 < allUrls.length; i2++) {
       var url2 = allUrls[i2];
